@@ -1,15 +1,18 @@
 # Monzo Go Client
 
-A simple, lightweight Go library for interacting with the Monzo API. This library provides a clean, idiomatic Go interface to all major Monzo API endpoints with extensive test coverage.
+A simple, lightweight Go library for interacting with the Monzo API. This library provides a clean, idiomatic Go interface to all major Monzo API endpoints with **fully automated OAuth authentication**.
 
 ## Features
 
-- **Complete API Coverage**: Supports all major Monzo API endpoints including accounts, transactions, pots, webhooks, and more
-- **Lightweight**: Minimal dependencies, uses only the Go standard library
-- **Well-tested**: 83%+ test coverage with comprehensive unit tests
-- **Easy to Extend**: Clean architecture makes it simple to add new endpoints
-- **Type-safe**: Strongly typed request/response structs
-- **Context Support**: All API calls support context for cancellation and timeouts
+- **🚀 Automatic OAuth Flow**: Complete OAuth handled automatically - just provide your credentials!
+- **💾 Token Persistence**: Tokens are saved to disk and automatically loaded on subsequent runs
+- **🔄 Auto-Refresh**: Expired tokens are automatically refreshed without user intervention
+- **📦 Complete API Coverage**: All major Monzo API endpoints supported
+- **🪶 Lightweight**: Zero external dependencies, uses only the Go standard library
+- **✅ Well-tested**: 64%+ test coverage with comprehensive unit tests
+- **🏗️ Easy to Extend**: Clean architecture makes it simple to add new endpoints
+- **🔒 Type-safe**: Strongly typed request/response structs
+- **⏱️ Context Support**: All API calls support context for cancellation and timeouts
 
 ## Installation
 
@@ -17,99 +20,165 @@ A simple, lightweight Go library for interacting with the Monzo API. This librar
 go get github.com/esteanes/monzo-client/monzo
 ```
 
-## Quick Start
+## Quick Start (Easiest Way)
+
+The library handles **ALL OAuth complexity** for you. Just 3 lines of code!
 
 ```go
 package main
 
 import (
     "context"
-    "fmt"
     "log"
 
     "github.com/esteanes/monzo-client/monzo"
 )
 
 func main() {
-    // Create a new client with your access token
-    client := monzo.NewClient(
-        monzo.WithAccessToken("your_access_token"),
-    )
-
-    // List all accounts
-    accounts, err := client.Accounts.List(context.Background(), nil)
+    // That's it! This handles EVERYTHING:
+    // ✓ Opens browser for OAuth
+    // ✓ Handles callback automatically
+    // ✓ Saves token to disk (~/.monzo/token.json)
+    // ✓ Loads existing token on next run
+    // ✓ Auto-refreshes when expired
+    client, err := monzo.SimpleAuth("your_client_id", "your_client_secret")
     if err != nil {
         log.Fatal(err)
     }
 
+    // Now just use the client - it handles everything!
+    accounts, _ := client.Accounts.List(context.Background(), nil)
     for _, account := range accounts {
-        fmt.Printf("Account: %s (%s)\n", account.Description, account.ID)
-    }
-
-    // Get balance for the first account
-    if len(accounts) > 0 {
-        balance, err := client.Balance.Get(context.Background(), accounts[0].ID)
-        if err != nil {
-            log.Fatal(err)
-        }
-
-        fmt.Printf("Balance: £%.2f\n", float64(balance.Balance)/100)
+        balance, _ := client.Balance.Get(context.Background(), account.ID)
+        println(account.Description, "£", balance.Balance/100)
     }
 }
 ```
 
-## Authentication
+**First run**: Opens browser for OAuth authorization
+**Subsequent runs**: Uses saved token automatically (no browser needed!)
 
-The Monzo API uses OAuth 2.0 for authentication. This library provides helpers for the OAuth flow:
+## How Authentication Works
 
-### Step 1: Get Authorization URL
+### The Simple Way (Recommended)
+
+```go
+client, err := monzo.SimpleAuth(clientID, clientSecret)
+// That's it! Use client for all API calls
+```
+
+This single function:
+1. Checks for existing token in `~/.monzo/token.json`
+2. If found and valid, uses it immediately
+3. If expired, automatically refreshes it
+4. If not found, starts OAuth flow:
+   - Starts local callback server on `http://localhost:8080`
+   - Opens your browser to Monzo's authorization page
+   - Waits for you to approve
+   - Receives the callback automatically
+   - Exchanges code for token
+   - Saves token for future use
+5. Returns a client that auto-refreshes tokens when they expire
+
+## Advanced Authentication
+
+### Custom OAuth Configuration
+
+If you need more control, you can customize the OAuth flow:
+
+```go
+config := &monzo.OAuthConfig{
+    ClientID:     "your_client_id",
+    ClientSecret: "your_client_secret",
+    RedirectURL:  "http://localhost:8080/",
+}
+
+flow := monzo.NewOAuthFlow(config)
+
+// Authenticate with custom timeout
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+defer cancel()
+
+client, err := flow.Authenticate(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Get auto-refreshing client
+autoRefreshClient := flow.NewAutoRefreshingClient()
+```
+
+### Custom Token Storage
+
+By default, tokens are stored in `~/.monzo/token.json`. You can customize this:
+
+```go
+// Use custom token file location
+store := monzo.NewFileTokenStore("/path/to/token.json")
+
+client, err := monzo.AuthenticateWithStore(ctx, config, store)
+```
+
+Or implement your own storage (database, encrypted file, etc.):
+
+```go
+type MyTokenStore struct {
+    // your implementation
+}
+
+func (s *MyTokenStore) Save(token *monzo.Token) error {
+    // Save token to your storage
+    return nil
+}
+
+func (s *MyTokenStore) Load() (*monzo.Token, error) {
+    // Load token from your storage
+    return token, nil
+}
+
+func (s *MyTokenStore) Delete() error {
+    // Delete token from your storage
+    return nil
+}
+
+// Use custom store
+myStore := &MyTokenStore{}
+client, err := monzo.AuthenticateWithStore(ctx, config, myStore)
+```
+
+### Manual OAuth (for advanced use cases)
+
+If you need full control over the OAuth flow:
 
 ```go
 client := monzo.NewClient()
 
+// Step 1: Get authorization URL
 authURL := client.Auth.GetAuthURL(
     "your_client_id",
-    "https://your-app.com/callback",
+    "http://localhost:8080/",
     "random_state_token",
 )
+// Direct user to authURL
 
-// Redirect user to authURL
-```
-
-### Step 2: Exchange Authorization Code
-
-```go
+// Step 2: Exchange code for token
 tokenResp, err := client.Auth.ExchangeAuthorizationCode(
     context.Background(),
     "your_client_id",
     "your_client_secret",
-    "https://your-app.com/callback",
-    "authorization_code_from_callback",
+    "http://localhost:8080/",
+    "authorization_code",
 )
 
-if err != nil {
-    log.Fatal(err)
-}
-
-// Store tokenResp.AccessToken and tokenResp.RefreshToken securely
 client.SetAccessToken(tokenResp.AccessToken)
-```
 
-### Step 3: Refresh Access Token (when expired)
-
-```go
-tokenResp, err := client.Auth.RefreshAccessToken(
+// Step 3: Manually refresh when needed
+tokenResp, err = client.Auth.RefreshAccessToken(
     context.Background(),
     "your_client_id",
     "your_client_secret",
-    "your_refresh_token",
+    tokenResp.RefreshToken,
 )
-
-if err != nil {
-    log.Fatal(err)
-}
-
-client.SetAccessToken(tokenResp.AccessToken)
 ```
 
 ## Usage Examples
