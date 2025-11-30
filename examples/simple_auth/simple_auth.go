@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/esteanes/monzo-client/monzo"
+	"github.com/esteanes/monzo/monzo"
 )
 
 func main() {

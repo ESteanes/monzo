@@ -12,7 +12,7 @@ Get started with the Monzo API in under 5 minutes!
 ## Step 2: Install the Library
 
 ```bash
-go get github.com/esteanes/monzo-client/monzo
+go get github.com/esteanes/monzo/monzo
 ```
 
 ## Step 3: Write Your First Program
@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/esteanes/monzo-client/monzo"
+	"github.com/esteanes/monzo/monzo"
 )
 
 func main() {

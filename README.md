@@ -17,7 +17,7 @@ A simple, lightweight Go library for interacting with the Monzo API. This librar
 ## Installation
 
 ```bash
-go get github.com/esteanes/monzo-client/monzo
+go get github.com/esteanes/monzo/monzo
 ```
 
 ## Quick Start (Easiest Way)
@@ -31,7 +31,7 @@ import (
     "context"
     "log"
 
-    "github.com/esteanes/monzo-client/monzo"
+    "github.com/esteanes/monzo/monzo"
 )
 
 func main() {
