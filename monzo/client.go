@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/patrickmn/go-cache"
 )
 
 const (
@@ -21,9 +23,10 @@ const (
 
 // Client manages communication with the Monzo API
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL     string
+	httpClient  *http.Client
 	accessToken string
+	cache       *cache.Cache
 
 	// Services
 	Auth         *AuthService
@@ -61,6 +64,20 @@ func WithAccessToken(token string) ClientOption {
 	}
 }
 
+// WithCache sets a custom cache for the client
+func WithCache(customCache *cache.Cache) ClientOption {
+	return func(c *Client) {
+		c.cache = customCache
+	}
+}
+
+// WithCacheTTL sets the default cache TTL and cleanup interval
+func WithCacheTTL(defaultExpiration, cleanupInterval time.Duration) ClientOption {
+	return func(c *Client) {
+		c.cache = cache.New(defaultExpiration, cleanupInterval)
+	}
+}
+
 // NewClient creates a new Monzo API client
 func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
@@ -68,6 +85,8 @@ func NewClient(opts ...ClientOption) *Client {
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,
 		},
+		// Default cache: 5 minute expiration, 10 minute cleanup interval
+		cache: cache.New(5*time.Minute, 10*time.Minute),
 	}
 
 	// Apply options
@@ -92,6 +111,43 @@ func NewClient(opts ...ClientOption) *Client {
 // SetAccessToken sets the access token for the client
 func (c *Client) SetAccessToken(token string) {
 	c.accessToken = token
+}
+
+// GetCache returns the client's cache instance
+func (c *Client) GetCache() *cache.Cache {
+	return c.cache
+}
+
+// ClearCache clears all cached data
+func (c *Client) ClearCache() {
+	if c.cache != nil {
+		c.cache.Flush()
+	}
+}
+
+// CacheGet retrieves a value from the cache
+func (c *Client) CacheGet(key string) (interface{}, bool) {
+	return c.cache.Get(key)
+}
+
+// CacheSet stores a value in the cache with the default expiration time
+func (c *Client) CacheSet(key string, value interface{}) {
+	c.cache.Set(key, value, cache.DefaultExpiration)
+}
+
+// CacheSetWithExpiration stores a value in the cache with a custom expiration time
+func (c *Client) CacheSetWithExpiration(key string, value interface{}, expiration time.Duration) {
+	c.cache.Set(key, value, expiration)
+}
+
+// CacheDelete removes a value from the cache
+func (c *Client) CacheDelete(key string) {
+	c.cache.Delete(key)
+}
+
+// CacheItemCount returns the number of items in the cache
+func (c *Client) CacheItemCount() int {
+	return c.cache.ItemCount()
 }
 
 // newRequest creates an authenticated API request

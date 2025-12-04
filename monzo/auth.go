@@ -45,9 +45,7 @@ func (s *AuthService) GetAuthURL(clientID, redirectURI, state string) string {
 	params.Set("client_id", clientID)
 	params.Set("redirect_uri", redirectURI)
 	params.Set("response_type", "code")
-	if state != "" {
-		params.Set("state", state)
-	}
+	params.Set("state", state)
 
 	return AuthURL + "?" + params.Encode()
 }
