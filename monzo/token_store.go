@@ -2,10 +2,7 @@ package monzo
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -18,89 +15,47 @@ type TokenStore interface {
 
 // FileTokenStore stores tokens in a JSON file
 type FileTokenStore struct {
-	filePath string
+	storedToken StoredToken
 }
 
 // storedToken represents the token format stored in files
-type storedToken struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+type StoredToken struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
 }
 
-// NewFileTokenStore creates a new file-based token store
-func NewFileTokenStore(filePath string) *FileTokenStore {
-	return &FileTokenStore{
-		filePath: filePath,
-	}
+// NewTokenStore creates a new file-based token store
+func NewTokenStore() *FileTokenStore {
+	return &FileTokenStore{}
 }
 
-// DefaultTokenStore creates a token store in the user's home directory
 func DefaultTokenStore() (*FileTokenStore, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	configDir := filepath.Join(homeDir, ".monzo")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return nil, fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	tokenPath := filepath.Join(configDir, "token.json")
-	return NewFileTokenStore(tokenPath), nil
+	return NewTokenStore(), nil
 }
 
 // Save writes the token to the file
 func (s *FileTokenStore) Save(token *Token) error {
-	token.mu.RLock()
-	defer token.mu.RUnlock()
-
-	stored := storedToken{
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		ExpiresAt:    token.ExpiresAt,
-	}
-
-	data, err := json.MarshalIndent(stored, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal token: %w", err)
-	}
-
-	if err := os.WriteFile(s.filePath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write token file: %w", err)
-	}
-
+	s.storedToken.AccessToken = token.AccessToken
+	s.storedToken.ExpiresAt = token.ExpiresAt
+	s.storedToken.RefreshToken = token.RefreshToken
 	return nil
 }
 
 // Load reads the token from the file
 func (s *FileTokenStore) Load() (*Token, error) {
-	data, err := os.ReadFile(s.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil // No token stored yet
-		}
-		return nil, fmt.Errorf("failed to read token file: %w", err)
-	}
-
-	var stored storedToken
-	if err := json.Unmarshal(data, &stored); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token: %w", err)
-	}
-
 	return &Token{
-		AccessToken:  stored.AccessToken,
-		RefreshToken: stored.RefreshToken,
-		ExpiresAt:    stored.ExpiresAt,
+		AccessToken:  s.storedToken.AccessToken,
+		RefreshToken: s.storedToken.RefreshToken,
+		ExpiresAt:    s.storedToken.ExpiresAt,
 	}, nil
 }
 
 // Delete removes the token file
 func (s *FileTokenStore) Delete() error {
-	if err := os.Remove(s.filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete token file: %w", err)
-	}
+	s.storedToken.AccessToken = ""
+	s.storedToken.RefreshToken = ""
+	s.storedToken.ExpiresAt = time.Unix(0, 0)
 	return nil
 }
 

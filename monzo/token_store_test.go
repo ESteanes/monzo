@@ -1,19 +1,15 @@
 package monzo
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestFileTokenStore_SaveAndLoad(t *testing.T) {
-	// Create temp file
-	tmpDir := t.TempDir()
-	tokenPath := filepath.Join(tmpDir, "token.json")
-
-	store := NewFileTokenStore(tokenPath)
-
+	store, err := DefaultTokenStore()
+	if err != nil {
+		t.Fatalf("Unable to create default token store.")
+	}
 	// Create test token
 	token := &Token{
 		AccessToken:  "test_access_token",
@@ -22,14 +18,9 @@ func TestFileTokenStore_SaveAndLoad(t *testing.T) {
 	}
 
 	// Save token
-	err := store.Save(token)
+	err = store.Save(token)
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
-	}
-
-	// Check file exists
-	if _, err := os.Stat(tokenPath); os.IsNotExist(err) {
-		t.Error("expected token file to exist")
 	}
 
 	// Load token
@@ -58,10 +49,7 @@ func TestFileTokenStore_SaveAndLoad(t *testing.T) {
 }
 
 func TestFileTokenStore_LoadNonexistent(t *testing.T) {
-	tmpDir := t.TempDir()
-	tokenPath := filepath.Join(tmpDir, "nonexistent.json")
-
-	store := NewFileTokenStore(tokenPath)
+	store, err := DefaultTokenStore()
 
 	// Load should return nil, nil for nonexistent file
 	token, err := store.Load()
@@ -75,10 +63,7 @@ func TestFileTokenStore_LoadNonexistent(t *testing.T) {
 }
 
 func TestFileTokenStore_Delete(t *testing.T) {
-	tmpDir := t.TempDir()
-	tokenPath := filepath.Join(tmpDir, "token.json")
-
-	store := NewFileTokenStore(tokenPath)
+	store, err := DefaultTokenStore()
 
 	// Save a token
 	token := &Token{
@@ -87,7 +72,7 @@ func TestFileTokenStore_Delete(t *testing.T) {
 		ExpiresAt:    time.Now().Add(1 * time.Hour),
 	}
 
-	err := store.Save(token)
+	err = store.Save(token)
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -98,84 +83,27 @@ func TestFileTokenStore_Delete(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	// Check file doesn't exist
-	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
-		t.Error("expected token file to be deleted")
-	}
-
 	// Deleting again should not error
 	err = store.Delete()
 	if err != nil {
 		t.Fatalf("Delete() on nonexistent file error = %v", err)
 	}
-}
 
-func TestFileTokenStore_Permissions(t *testing.T) {
-	tmpDir := t.TempDir()
-	tokenPath := filepath.Join(tmpDir, "token.json")
-
-	store := NewFileTokenStore(tokenPath)
-
-	token := &Token{
-		AccessToken:  "test",
-		RefreshToken: "test",
-		ExpiresAt:    time.Now().Add(1 * time.Hour),
-	}
-
-	err := store.Save(token)
+	// Check that the value was actually deleted
+	expectedAccessToken := ""
+	expectedRefreshToken := ""
+	expectedExpiresAtTime := time.Unix(0, 0)
+	finalToken, err := store.Load()
 	if err != nil {
-		t.Fatalf("Save() error = %v", err)
+		t.Fatalf("unable to load token, error = %v", err)
 	}
-
-	// Check file permissions (should be 0600)
-	info, err := os.Stat(tokenPath)
-	if err != nil {
-		t.Fatalf("Stat() error = %v", err)
+	if expectedAccessToken != finalToken.AccessToken {
+		t.Fatalf("access token not wiped")
 	}
-
-	mode := info.Mode().Perm()
-	expectedMode := os.FileMode(0600)
-
-	if mode != expectedMode {
-		t.Errorf("expected file mode %v, got %v", expectedMode, mode)
+	if expectedRefreshToken != finalToken.RefreshToken {
+		t.Fatalf("refresh token not wiped")
 	}
-}
-
-func TestDefaultTokenStore(t *testing.T) {
-	store, err := DefaultTokenStore()
-	if err != nil {
-		t.Fatalf("DefaultTokenStore() error = %v", err)
-	}
-
-	if store == nil {
-		t.Fatal("expected store to be created")
-	}
-
-	if store.filePath == "" {
-		t.Error("expected filePath to be set")
-	}
-
-	// Should contain .monzo directory
-	if !filepath.IsAbs(store.filePath) {
-		t.Error("expected absolute path")
-	}
-
-	// Clean up test directory if it was created
-	dir := filepath.Dir(store.filePath)
-	if filepath.Base(dir) == ".monzo" {
-		os.RemoveAll(dir)
-	}
-}
-
-func TestNewFileTokenStore(t *testing.T) {
-	path := "/tmp/test_token.json"
-	store := NewFileTokenStore(path)
-
-	if store == nil {
-		t.Fatal("expected store to be created")
-	}
-
-	if store.filePath != path {
-		t.Errorf("expected filePath %s, got %s", path, store.filePath)
+	if expectedExpiresAtTime != finalToken.ExpiresAt {
+		t.Fatalf("expires at time not wiped")
 	}
 }
