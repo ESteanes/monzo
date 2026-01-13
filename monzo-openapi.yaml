@@ -18,7 +18,7 @@ servers:
     description: OAuth authorization server
 
 security:
-  - BearerAuth: []
+  - MonzoOAuth2: []
 
 tags:
   - name: Authentication
@@ -759,11 +759,24 @@ paths:
 
 components:
   securitySchemes:
+    MonzoOAuth2:
+      type: oauth2
+      description: |
+        Monzo uses OAuth 2.0 for authentication. Before you begin, create a client in the developer tools at https://developers.monzo.com.
+
+        Confidential clients receive refresh tokens, while non-confidential clients must re-authenticate when access tokens expire.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.monzo.com/
+          tokenUrl: https://api.monzo.com/oauth2/token
+          refreshUrl: https://api.monzo.com/oauth2/token
+          scopes: {}
+
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: OAuth 2.0 access token
+      description: Direct Bearer token authentication (for manually providing access tokens)
 
   schemas:
     AuthorizationCodeRequest:
